@@ -25,6 +25,10 @@ editor: visual
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(fpp3)
+# Set graphics device to support Unicode characters
+options(device = function(...) {
+  grDevices::png(..., type = "cairo")
+})
 ```
 
 ## Question 1 (Quarto)
@@ -147,9 +151,7 @@ c)  Make a lag plot with the first 20 lags. Which lags display strong positive c
 pelt |>
   gg_lag(Lynx, lags = 1:20, geom = "point") +
   labs(title = "Lag Plot: Lynx Pelts")
-ggsave("../_images/a1-q4-c.png", width = 8, height = 5)
 ```
-![](../_images/a1-q4-c.png)
 
 Strong positive correlation appears at lags around 10 years (specifically lags 9-11), suggesting a cyclical pattern with approximately 10-year periods. Strong negative correlation appears at lags around 5 years (lags 4-6), which represents the opposite phase of the cycle. This can be verified in the time plot, which shows cyclical peaks occurring roughly every 10 years.
 
@@ -164,10 +166,7 @@ source("../_code/plot_util.R")
 pelt |>
   gg_custom_season(Lynx, period = 10) +
   labs(title = "Custom Seasonal Plot: Lynx Pelts (10-year period)")
-ggsave("../_images/a1-q4-e.png", width = 8, height = 5)
 ```
-
-![](../_images/a1-q4-e.png)
 
 The resulting plot does not strongly suggest true seasonality. While there is a cyclical pattern with roughly 10-year periods, this is a natural population cycle rather than calendar-based seasonality. The cycles are not perfectly regular (they vary in length and amplitude), and the pattern is driven by predator-prey dynamics rather than seasonal factors like weather or calendar effects.
 
@@ -185,9 +184,7 @@ canadian_gas |>
   labs(title = "Canadian Gas Production",
        y = "Billion cubic meters",
        x = "Month")
-ggsave("../_images/a1-q5-1.png", width = 8, height = 5)
 ```
-![](../_images/a1-q5-1.png)
 ```{r}
 canadian_gas |>
   features(Volume, features = guerrero)
@@ -234,9 +231,7 @@ gas |>
   labs(title = "Gas Production (Last 5 Years)",
        y = "Production",
        x = "Quarter")
-ggsave("../_images/a1-q6-a.png", width = 8, height = 5)
 ```
-![](../_images/a1-q6-a.png)
 
 Yes, the time series shows clear seasonal fluctuations with a regular pattern repeating every year. There is also a visible upward trend-cycle, with gas production increasing over the 5-year period.
 
@@ -248,9 +243,7 @@ gas |>
   components() |>
   autoplot() +
   labs(title = "Classical Multiplicative Decomposition of Gas Production")
-ggsave("../_images/a1-q6-b.png", width = 8, height = 5)
 ```
-![](../_images/a1-q6-b.png)
 
 c.  Do the results support the graphical interpretation from part a?
 
@@ -280,9 +273,7 @@ gas |>
   labs(title = "Seasonally Adjusted Gas Production",
        y = "Seasonally Adjusted Production",
        x = "Quarter")
-ggsave("../_images/a1-q6-d.png", width = 8, height = 5)
 ```
-![](../_images/a1-q6-d.png)
 The seasonally adjusted data removes the seasonal fluctuations, making the upward trend more visible and easier to interpret.
 
 e.  Change one observation to be an outlier by running the following snippet:
@@ -300,9 +291,7 @@ gas_outlier |>
   components() |>
   autoplot() +
   labs(title = "Decomposition with Outlier at 2007Q4")
-ggsave("../_images/a1-q6-e-1.png", width = 8, height = 5)
 ```
-![](../_images/a1-q6-e-1.png)
 
 ```{r}
 gas_outlier |>
@@ -312,9 +301,7 @@ gas_outlier |>
   labs(title = "Seasonally Adjusted Gas Production (with Outlier)",
        y = "Seasonally Adjusted Production",
        x = "Quarter")
-ggsave("../_images/a1-q6-e-2.png", width = 8, height = 5)
 ```
-![](../_images/a1-q6-e-2.png)
 
 The outlier at 2007Q4 significantly affects the decomposition. The trend-cycle estimate is distorted around the outlier point, creating artificial bumps before and after the outlier. The seasonally adjusted data shows a large spike at 2007Q4, and the outlier also affects the seasonal indices estimation, particularly for Q4. The classical decomposition method is not robust to outliers.
 
@@ -331,9 +318,7 @@ gas_outlier_end |>
   components() |>
   autoplot() +
   labs(title = "Decomposition with Outlier at 2010Q1 (Near End)")
-ggsave("../_images/a1-q6-f-1.png", width = 8, height = 5)
 ```
-![](../_images/a1-q6-f-1.png)
 
 ```{r}
 gas_outlier_end |>
@@ -343,9 +328,7 @@ gas_outlier_end |>
   labs(title = "Seasonally Adjusted Gas Production (Outlier Near End)",
        y = "Seasonally Adjusted Production",
        x = "Quarter")
-ggsave("../_images/a1-q6-f-2.png", width = 8, height = 5)
 ```
-![](../_images/a1-q6-f-2.png)
 
 Yes, it makes a difference. When the outlier is near the end of the series (2010Q1), the distortion to the trend is less severe because there are fewer observations after the outlier for the moving average to smooth. The trend shows a bump but cannot recover as much as when the outlier is in the middle. The impact on seasonal indices is also different, as there are fewer complete years after the outlier to average out its effect.
 
@@ -361,9 +344,7 @@ canadian_gas |>
   components() |>
   autoplot() +
   labs(title = "STL Decomposition of Canadian Gas Production")
-ggsave("../_images/a1-q7-a.png", width = 8, height = 5)
 ```
-![](../_images/a1-q7-a.png)
 
 The STL decomposition successfully separates the Canadian gas production data into trend, seasonal, and remainder components. The trend shows a strong upward movement over time. The seasonal component displays a regular yearly pattern, and the remainder captures the irregular fluctuations.
 
@@ -377,9 +358,7 @@ canadian_gas |>
   labs(title = "Seasonal Component Over Time",
        y = "Seasonal component",
        x = "Month")
-ggsave("../_images/a1-q7-b.png", width = 8, height = 5)
 ```
-![](../_images/a1-q7-b.png)
 
 The seasonal plot shows that the seasonal shape changes significantly over time. Earlier years (e.g., 1960s-1970s) show different seasonal patterns compared to later years. The amplitude and shape of the seasonal component evolve, with more pronounced peaks and troughs in recent decades. This indicates that the seasonal pattern is not constant but has changed as gas production and consumption patterns have evolved.
 
@@ -392,9 +371,7 @@ canadian_gas |>
   components() |>
   autoplot() +
   labs(title = "STL Decomposition with Calendar Adjustment")
-ggsave("../_images/a1-q7-c-1.png", width = 8, height = 5)
 ```
-![](../_images/a1-q7-c-1.png)
 
 ```{r}
 canadian_gas |>
@@ -405,8 +382,6 @@ canadian_gas |>
   labs(title = "Seasonal Component Over Time (Calendar Adjusted)",
        y = "Seasonal component",
        x = "Month")
-ggsave("../_images/a1-q7-c-2.png", width = 8, height = 5)
 ```
-![](../_images/a1-q7-c-2.png)
 
 The calendar adjustment normalizes the data by the number of days in each month, removing the variation caused by months having different lengths. After the adjustment, the seasonal component becomes smoother and more regular. The effect is particularly noticeable for February (which has fewer days) and for months with 31 days. The seasonal pattern is now more clearly attributable to true seasonal effects (like weather and heating demand) rather than calendar effects.
