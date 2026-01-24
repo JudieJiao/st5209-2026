@@ -3,6 +3,8 @@ title: "ST5209/X Assignment 1"
 author: "Jiao Dian"
 format: pdf
 editor: visual
+execute:
+  warning: false
 
 ---
 
@@ -25,10 +27,6 @@ editor: visual
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(fpp3)
-# Set graphics device to support Unicode characters
-options(device = function(...) {
-  grDevices::png(..., type = "cairo")
-})
 ```
 
 ## Question 1 (Quarto)
@@ -67,8 +65,6 @@ vic_pigs |>
        x = "Month")
 ```
 
-![](../_images/a1-q2-b.png)
-
 ## Question 3 (Beer production)
 
 Consider the `aus_production` dataset loaded in the `fpp3` package. We will study the column measuring the production of beer.
@@ -82,8 +78,6 @@ aus_production |>
        y = "Megalitres",
        x = "Quarter")
 ```
-
-![](../_images/a1-q3-a.png)
 
 b)  Describe the observed trend.
 
@@ -99,8 +93,6 @@ aus_production |>
   labs(title = "Seasonal Plot: Australian Beer Production",
        y = "Megalitres")
 ```
-
-![](../_images/a1-q3-c.png)
 
 d)  What is the period of the seasonality?
 
@@ -130,12 +122,11 @@ pelt |>
        color = "Animal")
 ```
 
-![](../_images/a1-q4-a.png)
-
 b)  What happens when you try to use `gg_season()` to the lynx fur time series? What is producing the error?
 
 ```{r}
 #| error: true
+#| warning: false
 pelt |>
   gg_season(Lynx)
 ```
@@ -148,6 +139,8 @@ The error occurs because `gg_season()` requires a seasonal time series with a de
 c)  Make a lag plot with the first 20 lags. Which lags display strong positive correlation? Which lags display strong negative correlation? Verify this with the time plot.
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
 pelt |>
   gg_lag(Lynx, lags = 1:20, geom = "point") +
   labs(title = "Lag Plot: Lynx Pelts")
@@ -189,27 +182,20 @@ canadian_gas |>
 canadian_gas |>
   features(Volume, features = guerrero)
 ```
-   lambda_guerrero
-            <dbl>
-1           0.577
+
 ```{r}
+#| error: true
 canadian_gas |>
-  autoplot(box_cox(Volume, lambda = "auto")) +
+  autoplot(box_cox(Volume, lambda = 0.577)) +
   labs(title = "Box-Cox Transformed Canadian Gas Production",
        y = "Transformed Volume")
 ```
 
-Error in `geom_line()`:
-! Problem while computing aesthetics.
-ℹ Error occurred in the 1st layer.
-Caused by error in `abs(x[!lambda_0])^lambda[!lambda_0]`:
-! non-numeric argument to binary operator
-
 The Box-Cox transform is unhelpful for the `canadian_gas` data for the following reasons:
 
-1. Data contains zero or negative values: As shown by the error message above, the Box-Cox transformation fails because the dataset contains non-positive values. The transformation requires strictly positive data when λ ≠ 0（λ = 0.577）.
+1. Data contains zero or negative values: The Box-Cox transformation fails because the dataset contains non-positive values. The transformation requires strictly positive data when $\lambda \neq 0$.
 
-2. Mathematical incompatibility: The Box-Cox transformation formula $y^{(\lambda)} = \frac{y^\lambda - 1}{\lambda}$ (when λ ≠ 0) is undefined for y ≤ 0. Even attempting to apply the transformation with the Guerrero-suggested λ = 0.577 results in a "non-numeric argument" error.
+2. Mathematical incompatibility: The Box-Cox transformation formula $y^{(\lambda)} = \frac{y^\lambda - 1}{\lambda}$ (when $\lambda \neq 0$) is undefined for $y \leq 0$. Even with the Guerrero-suggested $\lambda = 0.577$, the transformation produces errors.
 
 3. No variance stabilization needed: Examining the time plot shows that while gas production has increased over time, the seasonal variation pattern is relatively consistent and doesn't exhibit strong heteroscedasticity that would require a variance-stabilizing transformation.
 
@@ -366,7 +352,10 @@ c.  Apply a calendar adjustment and compute the STL decomposition again. What is
 
 ```{r}
 canadian_gas |>
-  mutate(Volume_adjusted = Volume / days_in_month(Month) * mean(days_in_month(Month))) |>
+  mutate(
+    Volume_adjusted = Volume / days_in_month(Month) * 
+      mean(days_in_month(Month))
+  ) |>
   model(STL(Volume_adjusted)) |>
   components() |>
   autoplot() +
@@ -375,7 +364,10 @@ canadian_gas |>
 
 ```{r}
 canadian_gas |>
-  mutate(Volume_adjusted = Volume / days_in_month(Month) * mean(days_in_month(Month))) |>
+  mutate(
+    Volume_adjusted = Volume / days_in_month(Month) * 
+      mean(days_in_month(Month))
+  ) |>
   model(STL(Volume_adjusted)) |>
   components() |>
   gg_season(season_year) +
