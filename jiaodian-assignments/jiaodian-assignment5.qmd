@@ -1,0 +1,390 @@
+---
+title: "ST5209/X Assignment 5"
+format: pdf
+editor: visual
+author: "Jiao Dian"
+execute:
+  warning: false
+---
+
+## Submission
+
+1.  Render the document to get a .pdf printout.
+2.  Submit both the .qmd and .pdf files to Canvas.
+
+```{r}
+#| message: FALSE
+#| echo: FALSE
+#| output: false
+Sys.setlocale("LC_ALL", "English")
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+library(tidyverse)
+library(fpp3)
+```
+
+## 1. Modeling with ARIMA (Q9.7 in Hyndman & Athanasopoulos)
+
+```{r}
+aus_airpassengers |> autoplot(Passengers) +
+  labs(title = "Australian air passengers", y = "Passengers (millions)")
+```
+
+a.  **Fit an ARIMA model with `ARIMA()`.**
+
+```{r}
+fit_auto <- aus_airpassengers |>
+  model(arima = ARIMA(Passengers ~ 0 + pdq(0, 2, 1)))
+report(fit_auto)
+```
+
+The selected model is **ARIMA(0, 2, 1)** (no constant). The estimated MA(1) coefficient is $\hat\theta_1 = -0.8963$ (s.e. 0.0594), $\hat\sigma^2 = 4.308$, with log-likelihood $-97.02$, $\mathrm{AIC} = 198.04$, $\mathrm{AICc} = 198.32$, $\mathrm{BIC} = 201.65$.
+
+**Residual diagnostics.**
+
+```{r}
+fit_auto |> gg_tsresiduals()
+fit_auto |> augment() |> features(.innov, ljung_box, lag = 10, dof = 1)
+```
+
+The residual ACF spikes all sit inside the significance bands (largest $|\hat\rho|\approx 0.21$ at lag 4, within $\pm 2/\sqrt{47}\approx \pm 0.29$), the residual histogram looks roughly symmetric, and the Ljung–Box test at lag 10 (with `dof = 1`) gives $Q^* = 6.70$ and $p = 0.669$. We do not reject the white-noise null, so the residuals are consistent with white noise.
+
+**Forecasts for the next 10 years.**
+
+```{r}
+fit_auto |>
+  forecast(h = 10) |>
+  autoplot(aus_airpassengers) +
+  labs(title = "ARIMA(0,2,1) 10-year forecast", y = "Passengers (millions)")
+```
+
+The point forecasts from 2017 to 2026 are approximately $74.8, 77.0, 79.2, 81.3, 83.5, 85.7, 87.9, 90.1, 92.3, 94.5$ (in millions) — a nearly linear extrapolation with slope $\approx 2.2$ per year.
+
+b.  **Backshift operator form.**
+
+For ARIMA(0, 2, 1), the model is $(1-B)^2 X_t = (1 + \theta_1 B) W_t$. Substituting $\hat\theta_1 = -0.8963$,
+
+$$
+(1 - B)^2 X_t = (1 - 0.8963\,B)\, W_t, \qquad W_t \sim WN(0, 4.308).
+$$
+
+c.  **ARIMA(0, 1, 0) with drift.**
+
+```{r}
+fit_c <- aus_airpassengers |>
+  model(arima = ARIMA(Passengers ~ 1 + pdq(0, 1, 0)))
+report(fit_c)
+fit_c |>
+  forecast(h = 10) |>
+  autoplot(aus_airpassengers) +
+  labs(title = "ARIMA(0,1,0) with drift, 10-year forecast")
+```
+
+This is a random walk with drift $\hat c = 1.4191$ per year (s.e. 0.3014, $\hat\sigma^2 = 4.271$, AICc = 200.59). The point forecasts are $74.0, 75.4, 76.9, 78.3, 79.7, 81.1, 82.5, 84.0, 85.4, 86.8$ — exactly a straight line with slope $\hat c = 1.4191$. Compared with part (a), both give straight-line forecasts, but the slope here (1.42) is noticeably smaller than the slope from ARIMA(0,2,1) ($\approx 2.2$). The (0,1,0)+drift forecast slope is a long-run average, whereas the (0,2,1) slope reflects the *recent* drift (second differencing lets the slope itself evolve), so it captures the steepening growth towards the end of the series much better.
+
+d.  **ARIMA(2, 1, 2) with drift.**
+
+```{r}
+fit_d <- aus_airpassengers |>
+  model(arima = ARIMA(Passengers ~ 1 + pdq(2, 1, 2)))
+report(fit_d)
+fit_d |>
+  forecast(h = 10) |>
+  autoplot(aus_airpassengers) +
+  labs(title = "ARIMA(2,1,2) with drift, 10-year forecast")
+```
+
+The fit gives $\hat\phi_1 = -0.552, \hat\phi_2 = -0.733, \hat\theta_1 = 0.590, \hat\theta_2 = 1.000$, constant $3.222$, $\hat\sigma^2 = 4.031$, AICc = 206.61 (worse than part (a)'s 198.32). Forecasts $73.2, 75.6, 77.1, 77.7, 79.5, 81.3, 82.2, 83.6, 85.4, 86.6$ show a mild wave pattern (complex AR roots) superimposed on an upward trend, tracking slightly below the ARIMA(0,2,1) forecasts in the long run.
+
+**Removing the constant.**
+
+```{r}
+fit_d2 <- tryCatch(
+  aus_airpassengers |>
+    model(arima = ARIMA(Passengers ~ 0 + pdq(2, 1, 2))),
+  error = function(e) e
+)
+fit_d2
+```
+
+Without the drift term, `ARIMA()` returns a `NULL model` with the warning *"non-stationary AR part from CSS"*. The reason is that the MA root sits on the unit circle ($\hat\theta_2 = 1$), which creates a near-cancellation between AR and MA factors; once the drift that was soaking up the trend is taken away, the optimiser drifts onto a non-stationary AR region and the fit fails.
+
+e.  **ARIMA(0, 2, 1) with a constant.**
+
+```{r}
+fit_e <- aus_airpassengers |>
+  model(arima = ARIMA(Passengers ~ 1 + pdq(0, 2, 1)))
+report(fit_e)
+fit_e |>
+  forecast(h = 10) |>
+  autoplot(aus_airpassengers) +
+  labs(title = "ARIMA(0,2,1) with constant, 10-year forecast")
+```
+
+`ARIMA()` prints the warning *"Model specification induces a quadratic or higher order polynomial trend"* and labels the model `ARIMA(0,2,1) w/ poly`. Because the series is differenced twice, including a non-zero constant $c$ means the second difference has a non-zero mean, which implies $X_t$ carries a *quadratic* time trend $\tfrac{c}{2}t^2$. The forecasts $75.4, 78.2, 81.1, 84.0, 87.0, 90.0, 93.1, 96.3, 99.5, 103.0$ show exactly this — each year's increment gets larger (successive differences of forecasts: 2.8, 2.9, 2.9, 3.0, 3.0, 3.1, 3.1, 3.2, 3.3) — so the forecast curves upwards rather than growing linearly as in (a). This quadratic extrapolation is almost certainly unrealistic for air-passenger demand; for forecasting one should use the model in (a) instead.
+
+## 2. Seasonal ARIMA
+
+a.  **Load the data.**
+
+```{r}
+diabetes <- read_rds("../_data/cleaned/diabetes.rds")
+head(diabetes)
+```
+
+b.  **Build `Y`: log + seasonal difference.**
+
+```{r}
+dbt <- diabetes |> mutate(Y = difference(log(Cost), lag = 12))
+```
+
+c.  **KPSS test on `Y`.**
+
+```{r}
+dbt |> features(Y, unitroot_kpss)
+```
+
+The KPSS statistic is $0.209$ with reported p-value $0.1$ (the feasts/urca implementation caps p-values above 0.1 at 0.1). Since $p \geq 0.1 > 0.05$, we **fail to reject** the null of stationarity, so `Y` is consistent with a (level-)stationary series.
+
+d.  **Time plot of `log(Cost)`.**
+
+```{r}
+dbt |> autoplot(log(Cost)) +
+  labs(title = "log(Cost)")
+```
+
+`log(Cost)` shows a clear upward trend plus a strong annual seasonal pattern. The trend disappears from `Y` for two reasons at once:
+
+-   If $\log(\text{Cost}_t) \approx \alpha + \beta t + s_t + u_t$ with period-12 seasonal $s_t = s_{t-12}$ and linear trend, then $Y_t = 12\beta + (u_t - u_{t-12})$, i.e. the trend collapses to the constant $12\beta$ and the seasonal component cancels out.
+-   More generally, a seasonal difference removes any slowly-varying component whose value at $t$ is close to its value at $t-12$, which is exactly the behaviour of a linear (or locally linear) trend. What is left is short-horizon variation, which KPSS does not detect as non-stationary.
+
+e.  **Fit an ARIMA model to `log(Cost)`.**
+
+```{r}
+fit2 <- dbt |> model(arima = ARIMA(log(Cost)))
+report(fit2)
+```
+
+The fitted model is **ARIMA(2,0,2)(1,1,1)$_{12}$ with drift**, with coefficients $\hat\phi_1 = 0.721, \hat\phi_2 = 0.108, \hat\theta_1 = -0.681, \hat\theta_2 = 0.120, \hat\Phi_1 = 0.224, \hat\Theta_1 = -0.846$, drift $= 0.0151$, $\hat\sigma^2 = 0.003595$, log-likelihood $= 266.01$, $\mathrm{AIC} = -516.02$, $\mathrm{AICc} = -515.24$, $\mathrm{BIC} = -489.96$.
+
+f.  **Number of fitted parameters.**
+
+```{r}
+tidy(fit2)
+```
+
+The `tidy()` output lists **7 fitted coefficients**: `ar1, ar2, ma1, ma2, sar1, sma1, constant`. If we also count the innovation variance $\sigma^2$ as a fitted parameter (which R's AIC formula does), there are $k = 8$ parameters — this matches the implied penalty because $\mathrm{AIC} - (-2\log L) = -516.02 + 2(266.01) = 16 = 2 \times 8$.
+
+## 3. Model selection
+
+a.  **Null hypothesis and assumptions of the ADF test.**
+
+The Augmented Dickey–Fuller test fits a regression of $\Delta X_t$ on $X_{t-1}$ and lagged differences $\Delta X_{t-1}, \dots, \Delta X_{t-p}$, optionally with a constant and linear time trend. The null hypothesis is $H_0:$ the series has a **unit root** (is non-stationary, specifically $I(1)$), against $H_1:$ the series is stationary (possibly around a trend). The main assumptions are:
+
+-   The true data-generating process is a linear autoregression with i.i.d. (or at least white-noise, mean-zero, finite-variance) innovations;
+-   The number of lagged differences $p$ is chosen large enough to make the residuals uncorrelated but not so large that power is lost;
+-   Any deterministic component (constant / trend) included in the test regression matches the deterministic structure of the data under $H_1$.
+
+b.  **Can ADF and KPSS both have large p-values?**
+
+Yes. The two tests have *opposite* null hypotheses — ADF tests $H_0:$ unit root vs KPSS tests $H_0:$ stationarity — so "large p-value" means *failing to reject* their respective nulls:
+
+-   Large ADF p-value $\Rightarrow$ we cannot rule out a unit root.
+-   Large KPSS p-value $\Rightarrow$ we cannot rule out stationarity.
+
+Both tests can have low power in short or borderline samples (e.g. near-unit-root processes, $\phi = 0.95$), so it is entirely possible for neither test to reject. The correct interpretation then is simply that the data are not informative enough to distinguish stationarity from a unit root, and additional information (differencing + re-testing, plots, domain knowledge) should be used.
+
+c.  **AIC and AICc penalties for the Q2 model.**
+
+With $k = 8$ fitted parameters (7 coefficients + $\sigma^2$) and $n = 204$ observations:
+
+```{r}
+n <- nrow(diabetes); k <- 8
+aic_penalty  <- 2 * k
+aicc_penalty <- 2 * k + 2 * k * (k + 1) / (n - k - 1)
+c(AIC_penalty = aic_penalty, AICc_penalty = aicc_penalty)
+```
+
+-   $\text{AIC penalty} = 2k = \mathbf{16}$.
+-   $\text{AICc penalty} = 2k + \dfrac{2k(k+1)}{n - k - 1} = 16 + \dfrac{2 \cdot 8 \cdot 9}{204 - 8 - 1} = 16 + \dfrac{144}{195} \approx \mathbf{16.738}$.
+
+Sanity check: $\mathrm{AIC} - (-2 \log L) = -516.02 + 532.02 = 16 \checkmark$, $\mathrm{AICc} - \mathrm{AIC} \approx 0.787 \approx 144/195 \checkmark$.
+
+d.  **Fit an ETS model and compare.**
+
+```{r}
+fit_both <- diabetes |>
+  model(
+    arima = ARIMA(log(Cost)),
+    ets   = ETS(Cost)
+  )
+glance(fit_both) |> select(.model, log_lik, AIC, AICc, BIC)
+```
+
+The ETS selector chooses **ETS(M, A, M)** (multiplicative error, additive trend, multiplicative seasonality). The comparison table gives
+
+| Model | log L | AICc |
+|----|----|----|
+| ARIMA(2,0,2)(1,1,1)$_{12}$ w/ drift on log(Cost) | $+266.01$ | $-515.24$ |
+| ETS(M, A, M) on Cost | $-416.97$ | $871.23$ |
+
+e.  **Can we compare them via log-likelihood or AICc?**
+
+**No, not directly.** The ARIMA model was fit after a log-transform (`ARIMA(log(Cost))`), so its likelihood is on the scale of $\log(\text{Cost})$, while the ETS(M,A,M) model was fit on the original `Cost` scale. Changing variables from $\text{Cost}$ to $\log(\text{Cost})$ introduces a Jacobian $|d\log x / dx| = 1/x$, which shifts the log-likelihood by $-\sum_t \log(\text{Cost}_t)$ — a constant that has nothing to do with model fit. So the massive numerical gap in `log_lik` (+266 vs −417) and `AICc` (−515 vs +871) is almost entirely an artefact of the scale, not a statement about which model captures the data better. To compare them legitimately one would need to either (i) fit both on the same scale, or (ii) manually adjust the ARIMA log-likelihood by adding $-\sum_t \log(\text{Cost}_t)$ so that both likelihoods are on the original scale, or (iii) compare out-of-sample forecast accuracy (e.g. via time series cross-validation), which is scale-free.
+
+## 4. Dynamic regression (adapted from Q10.4 in Hyndman & Athanasopoulos)
+
+a.  **Inflation adjustment.**
+
+```{r}
+acc <- aus_accommodation |>
+  mutate(AdjTakings = Takings / CPI * 100)
+```
+
+b.  **Fit a dynamic regression model for each state.**
+
+```{r}
+knot <- yearquarter("2008 Q1")
+fits <- acc |>
+  model(dr = ARIMA(AdjTakings ~ season() + trend(knots = knot)))
+fits
+```
+
+Each row shows which ARIMA error structure was chosen by `ARIMA()` state-by-state.
+
+c.  **Victoria.**
+
+```{r}
+vic <- fits |> filter(State == "Victoria")
+report(vic)
+```
+
+For Victoria, the fitted model is a linear regression with **ARIMA(1,0,0)(0,0,1)$_4$** errors. The regression part has quarterly dummies, a pre-2008 slope, and a kink at 2008 Q1:
+
+-   Intercept $= 264.44$;
+-   Seasonal dummies (Q1 is the reference level): year2 $= -57.88$, year3 $= -36.02$, year4 $= -12.94$ — all highly significant — so Q1 has the highest takings, followed by Q4, Q3, Q2;
+-   Pre-knot linear slope $= 3.20$ (significant, $p \approx 6 \times 10^{-9}$); the post-knot *additional* slope is $0.389$ and is **not significant** ($p = 0.69$), so the trend essentially continues at the same pre-2008 rate;
+-   AR(1) $= 0.660$, SMA(1) $= 0.376$ (both significant, $p < 0.005$).
+
+**Is seasonality constant?** The seasonal dummies model only a *deterministic, time-invariant* seasonal pattern. The significant seasonal MA(1) term in the ARIMA errors ($\hat\Theta_1 = 0.376$, $p = 0.003$) tells us that after removing the fixed dummies there is still quarter-to-quarter-of-year autocorrelation left over — the seasonal pattern is **not** constant over time; its amplitude and/or shape evolve, and the SMA(1) component soaks up this remaining stochastic seasonality.
+
+d.  **Residual diagnostics for Victoria.**
+
+```{r}
+vic |> gg_tsresiduals()
+vic |> augment() |> features(.innov, ljung_box, lag = 8, dof = 0)
+```
+
+The innovation-ACF plot shows no spike outside the significance bands and the Ljung–Box test at lag 8 gives $Q^* = 4.90$ with $p = 0.769$ — far above any reasonable significance level — so the residuals are consistent with white noise.
+
+e.  **Forecast CPI, then forecast Victoria takings to the end of 2017.**
+
+The data ends in 2016 Q2, so we need $h = 6$ quarters (2016 Q3 through 2017 Q4).
+
+```{r}
+# Forecast CPI separately with its own ARIMA model
+cpi_ts <- acc |>
+  filter(State == "Victoria") |>
+  select(Date, CPI) |>
+  as_tsibble(index = Date)
+fit_cpi <- cpi_ts |> model(cpi_arima = ARIMA(CPI))
+report(fit_cpi)
+fcst_cpi <- fit_cpi |> forecast(h = 6)
+
+# Supply forecasted CPI as new_data to the Victoria dynamic regression
+new_data_vic <- new_data(acc |> filter(State == "Victoria"), 6) |>
+  mutate(CPI = fcst_cpi$.mean)
+
+fcst_adj <- vic |> forecast(new_data = new_data_vic)
+
+takings_fcst <- as_tibble(fcst_adj) |>
+  select(Date, AdjTakings_hat = .mean) |>
+  mutate(CPI = new_data_vic$CPI,
+         Takings_hat = AdjTakings_hat * CPI / 100)
+takings_fcst
+```
+
+The CPI model chosen is **ARIMA(0,1,0) with drift** (random walk with drift $\hat c = 0.570$ per quarter). Plugging the point forecasts of CPI into the Victoria model and re-inflating the adjusted takings by $\widehat{\text{Takings}} = \widehat{\text{AdjTakings}} \cdot \widehat{\text{CPI}} / 100$ gives:
+
+| Quarter | $\widehat{\text{AdjTakings}}$ | $\widehat{\text{CPI}}$ | $\widehat{\text{Takings}}$ (A\$M) |
+|-----------------|-----------------|-----------------|---------------------|
+| 2016 Q3 | 473.99 | 109.17 | **517.45** |
+| 2016 Q4 | 511.67 | 109.74 | **561.50** |
+| 2017 Q1 | 523.98 | 110.31 | **578.01** |
+| 2017 Q2 | 463.23 | 110.88 | **513.62** |
+| 2017 Q3 | 491.15 | 111.45 | **547.39** |
+| 2017 Q4 | 519.47 | 112.02 | **581.90** |
+
+```{r}
+acc |>
+  filter(State == "Victoria") |>
+  ggplot(aes(x = Date, y = Takings)) +
+  geom_line() +
+  geom_line(data = takings_fcst, aes(y = Takings_hat), colour = "red") +
+  labs(title = "Victoria total takings — history and 6-quarter forecast",
+       y = "Takings (A$M)")
+```
+
+The forecast preserves the strong Q1-peak / Q2-trough seasonal pattern and continues the pre-2008 linear rise.
+
+f.  **Sources of uncertainty not reflected in the prediction intervals.** The intervals shown by `forecast()` only propagate the ARIMA-error innovation variance of the Victoria model. They do **not** account for:
+
+-   **Uncertainty in the CPI forecast.** We plugged in the point forecasts $\widehat{\text{CPI}}$ as known covariates, so the variability coming from the CPI ARIMA model (and from re-inflating by a multiplicative, noisy CPI) is ignored.
+-   **Parameter estimation uncertainty** of the Victoria dynamic regression (coefficients on dummies, trend and the ARIMA parameters are treated as known at their point estimates).
+-   **Model uncertainty / specification risk**: we assumed one knot at 2008 Q1, a piecewise-linear trend, four deterministic seasonal dummies, and an ARIMA(1,0,0)(0,0,1)$_4$ error process. Any of these choices could be wrong, and the intervals do not widen to reflect that.
+
+## 5. State space models
+
+Consider $$
+T_t = T_{t-1} + \epsilon_t, \quad
+S_t = 0.8\, S_{t-4} + \eta_t, \quad
+Y_t = T_t + S_t + V_t,
+$$ with $\epsilon_t \sim WN(0, \sigma_1^2), \eta_t \sim WN(0, \sigma_2^2), V_t \sim WN(0, \sigma_3^2)$, mutually uncorrelated.
+
+a.  **Linear Gaussian state space form.**
+
+Because $S_t$ depends on $S_{t-4}$, we must keep three extra lags in the state. Let $$
+\mathbf{X}_t = \bigl(T_t,\; S_t,\; S_{t-1},\; S_{t-2},\; S_{t-3}\bigr)^\top \in \mathbb{R}^5.
+$$ Then
+
+$$
+\mathbf{X}_t = F\,\mathbf{X}_{t-1} + \mathbf{w}_t, \qquad
+Y_t = H\,\mathbf{X}_t + V_t,
+$$
+
+with $$
+F = \begin{pmatrix}
+1 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0.8 \\
+0 & 1 & 0 & 0 & 0 \\
+0 & 0 & 1 & 0 & 0 \\
+0 & 0 & 0 & 1 & 0
+\end{pmatrix}, \quad
+\mathbf{w}_t = \begin{pmatrix} \epsilon_t \\ \eta_t \\ 0 \\ 0 \\ 0 \end{pmatrix}, \quad
+Q = \mathrm{Cov}(\mathbf{w}_t) = \mathrm{diag}(\sigma_1^2,\, \sigma_2^2,\, 0,\, 0,\, 0),
+$$
+
+and $$
+H = \begin{pmatrix} 1 & 1 & 0 & 0 & 0 \end{pmatrix}, \qquad R = \mathrm{Var}(V_t) = \sigma_3^2.
+$$
+
+Verification: row 1 of $F\mathbf{X}_{t-1} + \mathbf{w}_t$ gives $T_{t-1} + \epsilon_t = T_t$; row 2 gives $0.8\, S_{t-4} + \eta_t = S_t$ (using that the 5-th entry of $\mathbf{X}_{t-1}$ is $S_{t-4}$); rows 3–5 simply shift $S_{t-1}, S_{t-2}, S_{t-3}$ down one lag. And $H \mathbf{X}_t = T_t + S_t$, so $H\mathbf{X}_t + V_t = Y_t$.
+
+b.  **Does $\lim_{t \to \infty}\mathrm{Var}(S_t - \hat S_{t|n})$ exist?**
+
+Interpreting $\hat S_{t|n}$ as the optimal (MSE-minimising) predictor given $Y_{1:n}$ with $n$ fixed and $t \to \infty$, we are asking about long-horizon forecast error for the seasonal component. Since $|0.8| < 1$, the process $S_t = 0.8 S_{t-4} + \eta_t$ is a causal stationary AR process (an AR(1) in the lag-4 operator) with $$
+\gamma_S(0) = \mathrm{Var}(S_t) = \frac{\sigma_2^2}{1 - 0.8^2} = \frac{\sigma_2^2}{0.36}.
+$$ As the forecast horizon $h = t - n \to \infty$, $\hat S_{t|n} \to E[S_t] = 0$ and the forecast error variance approaches the unconditional variance. So the limit **does exist** and
+
+$$
+\lim_{t \to \infty}\mathrm{Var}(S_t - \hat S_{t|n}) = \gamma_S(0) = \frac{\sigma_2^2}{1 - 0.8^2} = \frac{\sigma_2^2}{0.36} = \frac{25\,\sigma_2^2}{9}.
+$$
+
+c.  **Does $\lim_{t \to \infty}\mathrm{Var}(T_t - \hat T_{t|n})$ exist?**
+
+$T_t$ is a random walk, so $T_t = T_n + \sum_{k=n+1}^{t} \epsilon_k$ for $t > n$. The best predictor given $Y_{1:n}$ is $\hat T_{t|n} = \hat T_{n|n}$ (a random walk's forecast is flat), so
+
+$$
+\mathrm{Var}(T_t - \hat T_{t|n}) = \mathrm{Var}(T_n - \hat T_{n|n}) + (t-n)\,\sigma_1^2.
+$$
+
+As $t \to \infty$ the second term diverges linearly, so the limit **does not exist** (it is $+\infty$). This reflects the familiar fact that long-run forecasts of a random walk have unbounded uncertainty, while the stationary seasonal component's forecast uncertainty is bounded by its marginal variance.
