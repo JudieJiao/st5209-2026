@@ -79,7 +79,7 @@ fit_c |>
   labs(title = "ARIMA(0,1,0) with drift, 10-year forecast")
 ```
 
-This is a random walk with drift $\hat c = 1.4191$ per year (s.e. 0.3014, $\hat\sigma^2 = 4.271$, AICc = 200.59). The point forecasts are $74.0, 75.4, 76.9, 78.3, 79.7, 81.1, 82.5, 84.0, 85.4, 86.8$ — exactly a straight line with slope $\hat c = 1.4191$. Compared with part (a), both give straight-line forecasts, but the slope here (1.42) is noticeably smaller than the slope from ARIMA(0,2,1) ($\approx 2.2$). The (0,1,0)+drift forecast slope is a long-run average, whereas the (0,2,1) slope reflects the *recent* drift (second differencing lets the slope itself evolve), so it captures the steepening growth towards the end of the series much better.
+This is a random walk with drift $\hat c = 1.4191$ per year (s.e. 0.3014, $\hat\sigma^2 = 4.271$, AICc = 200.59). The point forecasts are $74.0, 75.4, 76.9, 78.3, 79.7, 81.1, 82.5, 84.0, 85.4, 86.8$ — a straight line with slope $\hat c = 1.4191$. Compared with part (a), both give straight-line forecasts, but the slope here (1.42) is smaller than that from ARIMA(0,2,1) ($\approx 2.2$). Formally, ARIMA(0,2,1) implies that the first differences follow an MA(1), so the forecast extrapolates the *recent* change in slope rather than a fixed drift, which better captures the steepening growth near the end of the series.
 
 d.  **ARIMA(2, 1, 2) with drift.**
 
@@ -106,7 +106,7 @@ fit_d2 <- tryCatch(
 fit_d2
 ```
 
-Without the drift term, `ARIMA()` returns a `NULL model` with the warning *"non-stationary AR part from CSS"*. The reason is that the MA root sits on the unit circle ($\hat\theta_2 = 1$), which creates a near-cancellation between AR and MA factors; once the drift that was soaking up the trend is taken away, the optimiser drifts onto a non-stationary AR region and the fit fails.
+Without the drift term, `ARIMA()` returns a `NULL model` and reports *"non-stationary AR part from CSS"* — the conditional-sum-of-squares optimiser cannot find a stationary AR configuration for this specification, so estimation fails.
 
 e.  **ARIMA(0, 2, 1) with a constant.**
 
@@ -120,7 +120,7 @@ fit_e |>
   labs(title = "ARIMA(0,2,1) with constant, 10-year forecast")
 ```
 
-`ARIMA()` prints the warning *"Model specification induces a quadratic or higher order polynomial trend"* and labels the model `ARIMA(0,2,1) w/ poly`. Because the series is differenced twice, including a non-zero constant $c$ means the second difference has a non-zero mean, which implies $X_t$ carries a *quadratic* time trend $\tfrac{c}{2}t^2$. The forecasts $75.4, 78.2, 81.1, 84.0, 87.0, 90.0, 93.1, 96.3, 99.5, 103.0$ show exactly this — each year's increment gets larger (successive differences of forecasts: 2.8, 2.9, 2.9, 3.0, 3.0, 3.1, 3.1, 3.2, 3.3) — so the forecast curves upwards rather than growing linearly as in (a). This quadratic extrapolation is almost certainly unrealistic for air-passenger demand; for forecasting one should use the model in (a) instead.
+`ARIMA()` warns that the specification induces a polynomial trend and labels the model `ARIMA(0,2,1) w/ poly`. With $d=2$, a non-zero constant $c$ means the second difference has mean $c$, so $X_t$ carries a quadratic term $\tfrac{c}{2}t^2$. The forecasts $75.4, 78.2, 81.1, 84.0, 87.0, 90.0, 93.1, 96.3, 99.5, 103.0$ have increasing year-on-year increments (2.8, 2.9, 2.9, 3.0, 3.0, 3.1, 3.1, 3.2, 3.3), i.e. curve upwards. Such quadratic extrapolation is unrealistic for air-passenger demand; the model in (a) is preferred.
 
 ## 2. Seasonal ARIMA
 
@@ -229,7 +229,7 @@ The ETS selector chooses **ETS(M, A, M)** (multiplicative error, additive trend,
 
 e.  **Can we compare them via log-likelihood or AICc?**
 
-**No, not directly.** The ARIMA model was fit after a log-transform (`ARIMA(log(Cost))`), so its likelihood is on the scale of $\log(\text{Cost})$, while the ETS(M,A,M) model was fit on the original `Cost` scale. Changing variables from $\text{Cost}$ to $\log(\text{Cost})$ introduces a Jacobian $|d\log x / dx| = 1/x$, which shifts the log-likelihood by $-\sum_t \log(\text{Cost}_t)$ — a constant that has nothing to do with model fit. So the massive numerical gap in `log_lik` (+266 vs −417) and `AICc` (−515 vs +871) is almost entirely an artefact of the scale, not a statement about which model captures the data better. To compare them legitimately one would need to either (i) fit both on the same scale, or (ii) manually adjust the ARIMA log-likelihood by adding $-\sum_t \log(\text{Cost}_t)$ so that both likelihoods are on the original scale, or (iii) compare out-of-sample forecast accuracy (e.g. via time series cross-validation), which is scale-free.
+**No, not directly.** The ARIMA was fit on $\log(\text{Cost})$, so its likelihood is on the log scale, while ETS(M,A,M) was fit on `Cost`. The change of variables introduces a Jacobian that shifts the ARIMA log-likelihood by $-\sum_t \log(\text{Cost}_t)$, which is a data-dependent constant unrelated to model fit. To compare the two, either fit them on the same scale, adjust the ARIMA log-likelihood by $-\sum_t \log(\text{Cost}_t)$, or compare out-of-sample forecast accuracy via time series cross-validation (scale-free).
 
 ## 4. Dynamic regression (adapted from Q10.4 in Hyndman & Athanasopoulos)
 
@@ -265,7 +265,7 @@ For Victoria, the fitted model is a linear regression with **ARIMA(1,0,0)(0,0,1)
 -   Pre-knot linear slope $= 3.20$ (significant, $p \approx 6 \times 10^{-9}$); the post-knot *additional* slope is $0.389$ and is **not significant** ($p = 0.69$), so the trend essentially continues at the same pre-2008 rate;
 -   AR(1) $= 0.660$, SMA(1) $= 0.376$ (both significant, $p < 0.005$).
 
-**Is seasonality constant?** The seasonal dummies model only a *deterministic, time-invariant* seasonal pattern. The significant seasonal MA(1) term in the ARIMA errors ($\hat\Theta_1 = 0.376$, $p = 0.003$) tells us that after removing the fixed dummies there is still quarter-to-quarter-of-year autocorrelation left over — the seasonal pattern is **not** constant over time; its amplitude and/or shape evolve, and the SMA(1) component soaks up this remaining stochastic seasonality.
+**Is seasonality constant?** The seasonal dummies impose a *deterministic, time-invariant* seasonal pattern. The significant seasonal MA(1) term ($\hat\Theta_1 = 0.376$, $p = 0.003$) indicates that **residual seasonal dependence remains after the fixed dummies** — the dummies alone do not fully capture the seasonal structure, and the SMA(1) component absorbs the leftover stochastic seasonal correlation.
 
 d.  **Residual diagnostics for Victoria.**
 
